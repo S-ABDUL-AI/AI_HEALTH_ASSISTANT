@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
-from sentence_transformers import SentenceTransformer
-import openai
+import os
+from openai import OpenAI
 import time
 
 # ==========================
 # OpenAI API Key
 # ==========================
-openai.api_key = " "
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", "")).strip()
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ==========================
 # Load dataset and model
@@ -26,20 +27,25 @@ def health_chatbot_rule(user_input):
     return None
 
 def health_chatbot_gpt(user_input):
+    if client is None:
+        return (
+            "I can provide a basic response from local health rules right now. "
+            "To enable advanced AI answers, set OPENAI_API_KEY in Streamlit secrets."
+        )
     messages = [
         {"role": "system", "content": "You are a helpful health assistant."},
         {"role": "user", "content": f"A user reports the symptom: '{user_input}'. Provide concise, safe, and informative advice. Suggest next steps but do NOT provide a diagnosis."}
     ]
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0.7,
-            max_tokens=200
+            max_tokens=220
         )
-        return response.choices[0].message['content'].strip()
+        return (response.choices[0].message.content or "").strip()
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"AI service error: {str(e)}"
 
 def health_chatbot(user_input):
     rule_response = health_chatbot_rule(user_input)
