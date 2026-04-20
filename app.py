@@ -94,6 +94,20 @@ def detect_red_flags(user_input: str) -> list[str]:
     return [term for term in RED_FLAG_TERMS if term in text]
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def check_openai_connection(api_key_fingerprint: str) -> Tuple[str, str]:
+    """Check whether the OpenAI key works and the API is reachable."""
+    if not OPENAI_API_KEY:
+        return "not_configured", "No API key configured."
+    try:
+        test_client = OpenAI(api_key=OPENAI_API_KEY)
+        # Lightweight connectivity/auth test.
+        test_client.models.list()
+        return "connected", "Connected. API key is valid."
+    except Exception as exc:
+        return "error", f"Connection failed: {exc}"
+
+
 def match_rule(data: pd.DataFrame, user_input: str) -> Optional[Dict]:
     text = user_input.lower().strip()
     if not text:
@@ -241,8 +255,20 @@ if using_fallback:
 
 with st.sidebar:
     st.subheader("Assistant settings")
-    use_llm = st.toggle("Use AI for additional context", value=bool(client))
-    st.caption(f"OpenAI status: {'configured' if client else 'not configured'}")
+    key_fingerprint = OPENAI_API_KEY[-8:] if OPENAI_API_KEY else "none"
+    conn_status, conn_message = check_openai_connection(key_fingerprint)
+    default_ai_toggle = conn_status == "connected"
+    use_llm = st.toggle("Use AI for additional context", value=default_ai_toggle, disabled=not default_ai_toggle)
+    if conn_status == "connected":
+        st.success(f"OpenAI status: connected. {conn_message}")
+    elif conn_status == "not_configured":
+        st.info("OpenAI status: not configured. Add `OPENAI_API_KEY` in secrets to enable AI context.")
+    else:
+        st.error(f"OpenAI status: error. {conn_message}")
+
+    if st.button("Re-check OpenAI connection"):
+        check_openai_connection.clear()
+        st.rerun()
     st.divider()
     with st.expander("How to use this app", expanded=True):
         st.markdown(
